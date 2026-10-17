@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <!-- <meta name="viewport" content="width=device-width, initial-scale=1.0"> -->
+    <title>會議室線上預約</title>
+    <style>
+      :root { --primary: #2563eb; --danger: #dc2626; --bg: #f8fafc; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #1e293b; }
+      .container {margin: 0 auto; background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+      h2, h3 { margin-top: 0; color: #0f172a; }
+
+
+      .form-grid { display: flex; flex-direction:column; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+      .full-width { grid-column: span 2; }
+      label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 6px; }
+
+
+      input, select, textarea { width: 50%; box-sizing: border-box; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem; }
+      button { cursor: pointer; padding: 10px 16px; border: none; border-radius: 6px; font-weight: 600; transition: background 0.2s; }
+      .btn-submit { background: var(--primary); color: #fff; width: 100%; font-size: 1rem; }
+      .btn-submit:hover { opacity: 0.9; }
+      .btn-delete { background: var(--danger); color: #fff; padding: 4px 10px; font-size: 0.8rem; }
+      .card-list { margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+      .slot-item { display: flex; justify-content: space-between; align-items: center; background: #f1f5f9; padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; }
+      .slot-time { font-weight: bold; color: var(--primary); }
+      .empty-msg { color: #64748b; font-style: italic; }
+      .clickable-date { position: relative; cursor: pointer; }
+      .clickable-date::-webkit-calendar-picker-indicator { position: absolute; top: 0; left: 0; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; cursor: pointer; }
+      input[type=checkbox]{ height: 0; width: 0; visibility: hidden; } 
+      .switch { cursor: pointer; width: 50px; height: 25px; background: grey; display: block; border-radius: 100px; position: relative; } 
+      .switch:after { content: ''; position: absolute; top: 2.5px; left: 2.5px; width: 20px; height: 20px; background: #fff; border-radius: 90px; transition: 0.3s; }
+      input:checked + .switch { background: #6f42c1;; } 
+      input:checked + .switch:after { left: calc(100% - 3px); transform: translateX(-100%); }
+      /* https://www.tpisoftware.com/tpu/articleDetails/2744 */
+
+
+      /* @media (max-width: 767.98px) {
+        :root {
+          font-size:1.2rem;
+        }
+      } */
+
+
+    /* 手機版響應式設定 (RWD) */
+      @media (max-width: 767.98px) {
+        body { padding: 10px; }
+        .container { padding: 16px; }
+      
+        /* 轉為單欄顯示 */
+        .form-grid { grid-template-columns: 1fr } 
+        .full-width { grid-column: span 1; }
+        input, select, textarea { width:100% }
+      
+        /* 彈出對話框改為手機寬度 */
+        dialog {
+          width: 85% !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+
+
+    <div class="container">
+      <h2>1007 會議室預約系統</h2>
+
+
+      <!-- 預約表單 -->
+      <form id="bookingForm" onsubmit="handleReserve(event)">
+        <div class="form-grid">
+          <div>
+            <label>預約日期</label>
+            <input type="date" id="date" class="clickable-date" required onchange="loadBookings()">
+          </div>
+          <div>
+            <label>預約廠商</label>
+            <select id="vendor" required>
+              <option value="" disabled selected>載入中...</option>
+            </select>
+          </div>
+          <div>
+            <label>開始時間</label>
+            <!-- <input type="number" min="8" max="19" placeholder="8" id="startTime" required> -->
+            <select id="startTime" required>
+              <option>09:00</option>
+              <option>10:00</option>
+              <option>11:00</option>
+              <option>12:00</option>
+              <option>13:00</option>
+              <option>14:00</option>
+              <option>15:00</option>
+              <option>16:00</option>
+              <option>17:00</option>
+              <option>18:00</option>
+              <option>19:00</option>
+            </select>
+          </div>
+          <div>
+            <label>結束時間</label>
+            <!-- <input type="number" min="8" max="19" placeholder="8" id="endTime" required> -->
+            <select id="endTime" required>
+              <option>09:00</option>
+              <option>10:00</option>
+              <option>11:00</option>
+              <option>12:00</option>
+              <option>13:00</option>
+              <option>14:00</option>
+              <option>15:00</option>
+              <option>16:00</option>
+              <option>17:00</option>
+              <option>18:00</option>
+              <option>19:00</option>
+            </select>
+          </div>
+          <div class="full-width">
+            <!-- <label>備註</label>
+            <input type="text" id="note" placeholder="例：廠商名若不在選單內請於此填寫"> -->
+            <p style="text-decoration: underline; cursor: pointer;" onclick="handleRules()">會議室使用規範</p>
+          </div>
+        </div>
+        <button type="submit" class="btn-submit" id="submitBtn">確認預約</button>
+      </form>
+
+
+      <!-- 時段佔用狀態清單 -->
+      <div class="card-list">
+        <div style="color:#6f42c1">當月預約狀況</div>
+        <input type="checkbox" id="checkMonthlySwitch" onclick="loadBookings()"/>
+        <label class="switch" for="checkMonthlySwitch">
+          <span class="switch-txt" turnOn="月" turnOff="日"></span>
+        </label>
+        <h3 id="currentDateTitle">當日已預約時段</h3>
+        <div id="bookingList">請先選擇日期查看預約狀況</div>
+      </div>
+    
+      <dialog id="customAlert" style="width:30%; max-height: 40%; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); border: 0px; border-radius: 8px; padding: 20px; margin-top: 10vh; align-items:center; justify-content:center; white-space: pre-line;">
+        <div style="overflow-y: auto;">
+          <p id="alertMessage"></p>
+        </div>
+        <button onclick="closeAlert()">確定</button>
+      </dialog>
+
+      <dialog id="deleteAlert" style="width:320px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); border: 0px; border-radius: 8px; padding: 20px; margin-top: 15vh;">
+        <p id="deleteAlertMessage" style="margin-top: 0; text-align: center;"></p>
+    
+        <!-- 房號輸入區塊 -->
+        <div id="roomInputContainer" style="margin: 12px 0;">
+          <input type="text" id="roomNumberInput" placeholder="例：1001" style="width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+        </div>
+    
+        <div style="display: flex; justify-content: center; gap: 10px; margin-top: 10px;">
+          <button id="btnConfirmDelete" onclick="confirmDelete()" style="padding: 6px 16px; background-color: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">確認</button>
+          <button onclick="closeDeleteAlert()" style="padding: 6px 16px; background-color: #e2e8f0; color: #334155; border: none; border-radius: 4px; cursor: pointer;">取消</button>
+        </div>
+      </dialog>
+
+    </div>
+
+
+    <script>
+      // 1. 請替換為重新部署後的 GAS Web App 網址
+      const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzK8BvM1Prq_i-7UdFTn2w1c3hcqyNbSImJkw2Siwp0Xj4W0f6wDmmUgUwZuTuXXKie/exec";
+
+      // API 呼叫輔助函式 (GET)
+      async function apiGet(action, params = {}) {
+        const query = new URLSearchParams({ action, ...params }).toString();
+        const res = await fetch(`${GAS_API_URL}?${query}`);
+        return await res.json();
+      }
+
+      // API 呼叫輔助函式 (POST)
+      // 注意：Content-Type 設為 text/plain 可避免觸發瀏覽器 CORS preflight (OPTIONS) 請求
+      async function apiPost(action, data = {}) {
+        const res = await fetch(GAS_API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action, ...data }),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        });
+        return await res.json();
+      }
+
+      let vendorMap = {};
+
+      // 2. 載入預約時段
+      function loadBookings() {
+        const date = document.getElementById('date').value;
+        const nowTime = new Date();
+        const checkMonthly = document.getElementById('checkMonthlySwitch');
+        const container = document.getElementById('bookingList');
+
+        if (!date) return;
+
+        if (!checkMonthly.checked) {
+          document.getElementById('currentDateTitle').innerText = `${date} 已預約時段`;
+          container.innerHTML = '載入中...';
+
+          apiGet('getBookingsByDate', { date }).then(bookings => {
+            if (!bookings || !bookings.length) {
+              container.innerHTML = '<div class="empty-msg">此日期全天開放預約</div>';
+              return;
+            }
+          
+            container.innerHTML = bookings.map(b => {
+              const targetTime = new Date(`${b.date.replace(/-/g, '/')} ${b.startTime}`);
+              return targetTime > nowTime ?
+              `
+              <div class="slot-item">
+                <div>
+                  <span class="slot-time">${b.startTime} - ${b.endTime}</span>
+                  <span>【${b.vendor}】</span>
+                </div>
+                <button class="btn-delete" onclick="handleDelete('${b.id}','${b.vendor}')">取消預約</button>
+              </div>
+              `:
+              `
+              <div class="slot-item">
+                <div>
+                  <span class="slot-time">${b.startTime} - ${b.endTime}</span>
+                  <span>【${b.vendor}】</span>
+                </div>
+                <button class="btn-delete" onclick="handleDelete('${b.id}')" style="background-color: #bebebe" disabled>不可取消</button>
+              </div>
+              `;
+            }).join('');
+          }).catch(err => {
+            container.innerHTML = '<div class="empty-msg">載入失敗，請重新整理</div>';
+          });
+
+        } else {
+          document.getElementById('currentDateTitle').innerText = `本月已預約時段`;
+          container.innerHTML = '載入中...';
+
+          apiGet('getBookingsByMonth', { date }).then(bookings => {
+            if (!bookings || !bookings.length) {
+              container.innerHTML = '<div class="empty-msg">整月開放預約</div>';
+              return;
+            }
+          
+            container.innerHTML = bookings.map(b => {
+              const targetTime = new Date(`${b.date.replace(/-/g, '/')} ${b.startTime}`);
+              return targetTime > nowTime ?
+              `
+              <div class="slot-item">
+                <div>
+                  <div style="color:#ff6484;font-weight: bold;">${b.date}</div>
+                  <span class="slot-time">${b.startTime} - ${b.endTime}</span>
+                  <span>【${b.vendor}】</span>
+                </div>
+                <button class="btn-delete" onclick="handleDelete('${b.id}','${b.vendor}')">取消預約</button>
+              </div>
+              `:
+              `
+              <div class="slot-item">
+                <div>
+                  <div style="color:#ff6484;font-weight: bold;">${b.date}</div>
+                  <span class="slot-time">${b.startTime} - ${b.endTime}</span>
+                  <span>【${b.vendor}】</span>
+                </div>
+                <button class="btn-delete" onclick="handleDelete('${b.id}')" style="background-color: #bebebe" disabled>不可取消</button>
+              </div>
+              `;
+            }).join('');
+          }).catch(err => {
+            container.innerHTML = '<div class="empty-msg">載入失敗，請重新整理</div>';
+          });
+        }
+      }
+
+      // 3. 初始化：載入廠商清單
+      window.onload = () => {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('date').value = today;
+      
+        apiGet('getVendorList').then(vendors => {
+          const select = document.getElementById('vendor');
+          select.innerHTML = '<option value="" disabled selected>請選擇廠商</option>';
+          vendorMap = {};
+          vendors.forEach(v => {
+            vendorMap[v.name] = v.room;
+            select.innerHTML += `<option value="${v.name}">${v.name}</option>`;
+          });
+        }).catch(err => console.error('取得廠商清單失敗', err));
+        
+        loadBookings();
+      };
+
+      function showAlert(message) {
+        const dialog = document.getElementById('customAlert');
+        document.getElementById('alertMessage').textContent = message;
+        dialog.showModal();
+        dialog.style.display = 'flex';
+        dialog.style.flexDirection = 'column';
+      }
+
+      function deleteAlert(message) {
+        const dialog = document.getElementById('deleteAlert');
+        document.getElementById('deleteAlertMessage').textContent = message;
+        dialog.showModal();
+        dialog.style.display = 'flex';
+        dialog.style.flexDirection = 'column';
+      }
+
+      function closeAlert(){
+        const dialog = document.getElementById('customAlert');
+        dialog.close();
+        dialog.style.display = 'none';
+      }
+
+      function closeDeleteAlert() {
+        const dialog = document.getElementById('deleteAlert');
+        dialog.close();
+        dialog.style.display = 'none';
+        targetBookingId = null;
+        targetBookingVendor = null;
+      }
+
+      // 4. 會議室規範
+      function handleRules() {
+        apiGet('getRules')
+          .then(rules => {
+            showAlert(rules.join('\n'));
+          })
+          .catch(error => {
+            console.error("取得規則失敗：", error);
+          });
+      }
+
+      // 5. 提交預約
+      function handleReserve(e) {
+        e.preventDefault();
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true;
+        btn.innerText = '處理中...';
+
+        const payload = {
+          date: document.getElementById('date').value,
+          vendor: document.getElementById('vendor').value,
+          startTime: document.getElementById('startTime').value,
+          endTime: document.getElementById('endTime').value
+        };
+
+        apiPost('addBooking', { booking: payload })
+          .then(res => {
+            showAlert(res.message);
+            btn.disabled = false;
+            btn.innerText = '確認預約';
+            if (res.success) {
+              loadBookings();
+            }
+          })
+          .catch(err => {
+            showAlert('系統發生錯誤');
+            btn.disabled = false;
+            btn.innerText = '確認預約';
+          });
+      }
+
+      let targetBookingId = null;
+      let targetBookingVendor = null;
+
+      function handleDelete(id, vendor) {
+        targetBookingId = id;
+        targetBookingVendor = vendor;
+        const deleteAlertMessage = document.getElementById('deleteAlertMessage');
+        const roomContainer = document.getElementById('roomInputContainer');
+        const roomInput = document.getElementById('roomNumberInput');
+        const dialog = document.getElementById('deleteAlert');
+        roomInput.value = '';
+
+        const requiredRoom = vendorMap[vendor] || '';
+
+        if (!requiredRoom) {
+          deleteAlertMessage.textContent = '確定要取消此筆預約嗎？';
+          roomContainer.style.display = 'none';
+        } else {
+          deleteAlertMessage.textContent = '確定要取消嗎？請輸入您的房號';
+          roomContainer.style.display = 'block';
+        }
+        dialog.showModal();
+        dialog.style.display = 'flex';
+        dialog.style.flexDirection = 'column';
+      }
+
+      // 6. 確認取消
+      function confirmDelete() {
+        const roomInput = document.getElementById('roomNumberInput');
+        const roomNumber = roomInput.value.trim();
+        const requiredRoom = vendorMap[targetBookingVendor] || '';
+
+        if (requiredRoom && !roomNumber) {
+          showAlert('請輸入房號以驗證身分！');
+          roomInput.focus();
+          return;
+        }
+
+        const btnConfirm = document.getElementById('btnConfirmDelete');
+        btnConfirm.disabled = true;
+        btnConfirm.textContent = '處理中...';
+
+        apiPost('deleteBooking', {
+          id: targetBookingId,
+          roomNumber: roomNumber,
+          vendor: targetBookingVendor
+        })
+          .then(res => {
+            btnConfirm.disabled = false;
+            btnConfirm.textContent = '確認';
+            closeDeleteAlert();
+          
+            showAlert(res.message);
+            if (res.success) {
+              loadBookings();
+            }
+          })
+          .catch(err => {
+            btnConfirm.disabled = false;
+            btnConfirm.textContent = '確認';
+            showAlert('發生錯誤：' + err.message);
+          });
+      }
+    </script>
+  </body>
+</html>
+
